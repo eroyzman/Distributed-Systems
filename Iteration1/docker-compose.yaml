@@ -1,0 +1,31 @@
+version: "3.9"
+services:
+
+     secondary1:
+       build:
+         context: .
+         dockerfile: secondary1/Dockerfile
+       image: secondary
+       networks:
+         - my_network
+
+     client:
+       build:
+         context: .
+         dockerfile: client/Dockerfile
+       image: client
+       networks:
+         - my_network
+
+     master_dns:
+       build:
+         context: .
+         dockerfile: master/Dockerfile
+       image: master
+       networks:
+         - my_network
+       ports:
+         - 9090:9090
+
+networks:
+     my_network:
