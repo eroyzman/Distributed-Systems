@@ -1,0 +1,24 @@
+1. In terminal type and run
+  $docker network create my_network
+  
+2. In terminal under master directory type and run
+  $docker build -t master .
+3. In terminal type and run 
+  $docker run --network=my_network --name master_dns -it master
+  
+4. In terminal under client directory type and run
+  $docker build -t client .
+5. In terminal type and run 
+  $docker run --network=my_network -it client
+  
+6. In terminal under secondary1 directory type and run
+  $docker build -t secondary1 .
+7. In terminal type and run 
+  $docker run --network=my_network -it secondary1
+  
+8. In terminal under secondary2 directory type and run
+  $docker build -t secondary2 .
+9. In terminal type and run 
+  $docker run --network=my_network -it secondary2
+  
+  For test functionality of destributed system type from client side PUSH and text and get one on secondary's sides
