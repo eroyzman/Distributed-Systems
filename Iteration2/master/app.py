@@ -22,27 +22,26 @@ async def main():
         if not (request.json.get("delay") is None):
             delay = request.json.get("delay")
         MESSAGES.append(message)
-        async with httpx.AsyncClient() as client:
-            match w:
-                case "1":
-                    result = await get_multiple_addresses(message, delay)
-                    return jsonify({"message": "successful"}), 200
-                case "2":
-                    results = await get_multiple_addresses(message, delay)
-                    for result in results:
-                        if result["status"] == 200:
-                            return jsonify({"ip_address": result["ip_address"], "status": "successful"}), result[
-                                "status"]
-                    return jsonify({"message": "failed"}), 500
-                case "3":
-                    results = await get_multiple_addresses(message, delay)
-                    for result in results:
-                        if result["status"] != 200:
-                            return jsonify({"ip_address": result["ip_address"], "status": "failed"}), result[
-                                "status"]
-                    return jsonify({"message": "successful"}), 200
-                case _:
-                    return jsonify({"message": "incorrect write_concern value!"})
+        match w:
+            case "1":
+                result = await get_multiple_addresses(message, delay)
+                return jsonify({"message": "successful"}), 200
+            case "2":
+                results = await get_multiple_addresses(message, delay)
+                for result in results:
+                    if result["status"] == 200:
+                        return jsonify({"ip_address": result["ip_address"], "status": "successful"}), result[
+                            "status"]
+                return jsonify({"message": "failed"}), 500
+            case "3":
+                results = await get_multiple_addresses(message, delay)
+                for result in results:
+                    if result["status"] != 200:
+                        return jsonify({"ip_address": result["ip_address"], "status": "failed"}), result[
+                            "status"]
+                return jsonify({"message": "successful"}), 200
+            case _:
+                return jsonify({"message": "incorrect write_concern value!"})
     return ",".join(MESSAGES)
 
 
