@@ -21,4 +21,4 @@
 9. In terminal type and run 
   $docker run --network=my_network -it secondary2
   
-  For test functionality of destributed system type from client side PUSH and text and get one on secondary's sides
+  For test functionality of distributed system type from client side PUSH and text and get one on secondary's sides
