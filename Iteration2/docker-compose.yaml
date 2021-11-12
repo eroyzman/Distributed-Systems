@@ -1,0 +1,45 @@
+version: "3.9"
+   
+services:
+  master:
+    build: ./master
+    ports:
+      - "8000:5000"
+    environment:
+      - START_RANGE
+      - END_RANGE
+      - LOCALHOST=slave
+    networks:
+      - distributed_systems
+    volumes:
+      - "./master:/master"
+
+  slave_1:
+    build: ./slave
+    ports:
+      - "6001:5000"
+    networks:
+      - distributed_systems
+    volumes:
+      - "./slave:/slave"
+    
+  slave_2:
+    build: ./slave
+    ports:
+      - "6002:5000"
+    networks:
+      - distributed_systems
+    volumes:
+      - "./slave:/slave"
+    
+  slave_3:
+    build: ./slave
+    ports:
+      - "6003:5000"
+    networks:
+      - distributed_systems
+    volumes:
+      - "./slave:/slave"
+
+networks:
+  distributed_systems:
