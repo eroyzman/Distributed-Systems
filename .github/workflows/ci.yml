@@ -1,0 +1,36 @@
+defaults:
+  run:
+    shell: "bash"
+
+name: "ci"
+on: [pull_request]
+
+env:
+  PRE_COMMIT_VERSION: "2.13.0"
+  PYTHON_VERSION: "3.8"
+
+jobs:
+  pre-commit:
+    name: "Run pre-commit"
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: "actions/checkout@v2.3.4"
+
+      - name: "Install Python"
+        uses: "actions/setup-python@v2.2.2"
+        with:
+          python-version: "${{ env.PYTHON_VERSION }}"
+
+      - name: "Install pre-commit"
+        run: "python3 -m pip install pre-commit==${{ env.PRE_COMMIT_VERSION }}"
+
+      - name: "Cache pre-commit"
+        uses: "actions/cache@v2.1.6"
+        with:
+          path: "~/.cache/pre-commit"
+          key: "pre-commit-${{ hashFiles('.pre-commit-config.yaml') }}"
+
+      - name: "Run pre-commit"
+        run: "python3 -m pre_commit run --all"

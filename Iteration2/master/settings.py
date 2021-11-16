@@ -9,9 +9,12 @@ END_RANGE = env.int("END_RANGE", 6004)
 LOCALHOST = env.str("LOCALHOST", "http://127.0.0.1")
 
 
-def slaves_ip_addresses() -> Iterator[str]:
+def slaves_ip_addresses() -> list[str]:
+    ip_addresses = []
     for idx, port in enumerate(range(START_RANGE, END_RANGE), start=1):
         if LOCALHOST == "http://127.0.0.1":
-            yield f"{LOCALHOST}:{port}/"
+            address = f"{LOCALHOST}:{port}/"
         else:
-            yield f"http://slave_{idx}:5000/"
+            address = f"http://slave_{idx}:5000/"
+        ip_addresses.append(address)
+    return ip_addresses
