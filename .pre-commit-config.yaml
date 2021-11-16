@@ -1,0 +1,58 @@
+default_language_version:
+  python: "python3.9"
+exclude: ^archive/.*|migrations/.*|.*/(migrations|test-data|vendor)/.*|.*\.svg$
+minimum_pre_commit_version: "1.17.0"
+repos:
+  - repo: "https://github.com/PyCQA/isort"
+    rev: "5.9.3"
+    hooks:
+      - id: "isort"
+        name: "Format code (isort)"
+        exclude: ^docs/.*$
+
+  - repo: "https://github.com/psf/black"
+    rev: "21.8b0"
+    hooks:
+      - id: "black"
+        # By default black hook using `python3` instead `python` language, so
+        # needed to provide concrete version here as well
+        language_version: "python3.9"
+        name: "Format code (black)"
+        exclude: ^docs/.*$
+
+  - repo: "https://github.com/pre-commit/pre-commit-hooks"
+    rev: "v4.0.1"
+    hooks:
+      - id: "end-of-file-fixer"
+      - id: "trailing-whitespace"
+
+  - repo: "https://github.com/PyCQA/flake8"
+    rev: "3.9.2"
+    hooks:
+      - id: "flake8"
+        name: "Lint code (flake8)"
+        additional_dependencies: &flake8_additional_dependencies
+          - "flake8==3.9.2"
+          - "flake8-broken-line==0.3.0"
+          - "flake8-bugbear==21.4.3"
+          - "flake8-builtins==1.5.3"
+          - "flake8-comprehensions==3.6.1"
+          - "flake8-eradicate==1.1.0"
+          - "flake8-isort==4.0.0"
+          - "flake8-mutable==1.2.0"
+          - "flake8-pie==0.14.0"
+          - "flake8-string-format==0.3.0"
+          - "flake8-tidy-imports==4.4.1"
+          - "flake8-variables-names==0.0.4"
+          - "pep8-naming==0.12.1"
+          # Local dependencies
+          - "flake8-django==1.1.2"
+        exclude: ^docs/.*$
+
+  - repo: "https://github.com/asottile/yesqa"
+    rev: "v1.2.3"
+    hooks:
+      - id: yesqa
+        name: "Lint code (yesqa)"
+        additional_dependencies: *flake8_additional_dependencies
+        exclude: ^docs/.*$
