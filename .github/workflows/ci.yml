@@ -7,13 +7,13 @@ on: [pull_request]
 
 env:
   PRE_COMMIT_VERSION: "2.13.0"
-  PYTHON_VERSION: "3.8"
+  PYTHON_VERSION: "3.9"
 
 jobs:
   pre-commit:
     name: "Run pre-commit"
 
-   runs-on: ubuntu-latest
+    runs-on: ubuntu-latest
 
     steps:
       - uses: "actions/checkout@v2.3.4"
