@@ -1,63 +1,87 @@
-from flask import Flask, request, jsonify
-import httpx
 import asyncio
+import time
 
+import httpx
+from flask import Flask, jsonify, request
+
+from master.after_response import AfterResponse
 from settings import slaves_ip_addresses
 
-# https://testdriven.io/blog/flask-async/
-# https://anandtripathi5.medium.com/getting-started-with-async-requests-in-flask-using-httpx-8c2c5e11b831
-# https://progressstory.com/tech/python/async-requests-with-flask/#implementation
-# https://www.python-httpx.org/async/
-
-app = Flask(__name__)
+# app = Flask(__name__)
+app = Flask("after_response")
+AfterResponse(app)
 MESSAGES = []
 
 
-@app.route('/', methods=['POST', 'GET'])
+@app.route("/", methods=["POST", "GET"])
 async def main():
-    if request.method == 'POST':
-        delay = 0
-        w: str = request.json.get("write_concern")
+    if request.method == "POST":
+        try:
+            write_concern: int = int(request.args.get("write_concern"))
+        except (TypeError, ValueError):
+            return jsonify(
+                {"message": "`write_concern` argument should be integer"}
+            )
         message: str = request.json.get("message")
-        if not (request.json.get("delay") is None):
-            delay = request.json.get("delay")
+        timestamp = time.time()
+
+        done = asyncio.Event()
+        done.write_concern = write_concern
+
         MESSAGES.append(message)
-        match w:
-            case "1":
-                result = await get_multiple_addresses(message, delay)
-                return jsonify({"message": "successful"}), 200
-            case "2":
-                results = await get_multiple_addresses(message, delay)
-                for result in results:
-                    if result["status"] == 200:
-                        return jsonify({"ip_address": result["ip_address"], "status": "successful"}), result[
-                            "status"]
-                return jsonify({"message": "failed"}), 500
-            case "3":
-                results = await get_multiple_addresses(message, delay)
-                for result in results:
-                    if result["status"] != 200:
-                        return jsonify({"ip_address": result["ip_address"], "status": "failed"}), result[
-                            "status"]
-                return jsonify({"message": "successful"}), 200
-            case _:
-                return jsonify({"message": "incorrect write_concern value!"})
+        if write_concern == 1:
+            return jsonify(
+                {"message": "successful"}), 200
+
+        tasks: list[asyncio.Task] = []
+        for ip_address in slaves_ip_addresses():
+            task = asyncio.create_task(
+                replicate_on_slaves(ip_address, message, timestamp, done)
+            )
+            tasks.append(task)
+
+        await done.wait()
+
+        # Cancel tasks that are not finished yet
+        for task in tasks:
+            task.cancel()
+
+        if done.write_concern > 1:
+            return (
+                jsonify(
+                    {"message": "Cannot guaranty the level of concern given"}
+                ),
+                400,
+            )
+
     return ",".join(MESSAGES)
 
 
-async def get_multiple_addresses(message, delay):
-    async with httpx.AsyncClient() as client:
-        tasks = []
-        for ip_address in slaves_ip_addresses():
-            task = asyncio.create_task(set_post(ip_address, client, message, delay))
-            tasks.append(task)
-        result = await asyncio.gather(*tasks, return_exceptions=True)
-    return result
+async def replicate_on_slaves(
+        ip_address: str, message: str, timestamp: float, done: asyncio.Event
+):
+    async with httpx.AsyncClient(timeout=5) as client:
+        try:
+            response = await client.post(
+                ip_address, json={"message": message, "timestamp": timestamp}
+            )
+
+            # Basically, the next thing is callback of a coroutine.
+            done.write_concern -= 1
+            if done.write_concern <= 1:
+                done.set()
+
+            return {
+                "ip_address": f"{ip_address}",
+                "status": response.status_code,
+            }
+        except (httpx.ConnectError, httpx.ReadTimeout):
+            done.set()
+            return {"ip_address": f"{ip_address}", "status": 500}
 
 
-async def set_post(ip_address, client, message, delay):
-    try:
-        response = await client.post(ip_address, json={"message": message, "delay": delay})
-        return {"ip_address": f"{ip_address}", 'status': response.status_code}
-    except httpx.ConnectError:
-        return {"ip_address": f"{ip_address}", 'status': 500}
+@app.after_response
+def replicate_after_request():
+    for ip_address in slaves_ip_addresses():
+        httpx.post(ip_address, json={"message": MESSAGES[-1]})
+        # print("after_response")
