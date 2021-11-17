@@ -1,5 +1,5 @@
 version: "3.9"
-   
+
 services:
   master:
     build: ./master
@@ -22,7 +22,7 @@ services:
       - distributed_systems
     volumes:
       - "./slave:/slave"
-    
+
   slave_2:
     build: ./slave
     ports:
@@ -31,7 +31,7 @@ services:
       - distributed_systems
     volumes:
       - "./slave:/slave"
-    
+
   slave_3:
     build: ./slave
     ports:

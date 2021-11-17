@@ -1,5 +1,3 @@
-from typing import Iterator
-
 from environs import Env
 
 env = Env()
