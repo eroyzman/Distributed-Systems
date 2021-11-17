@@ -17,4 +17,3 @@ post with w=2 (response from Master and first available Secondary)
 post with w=2 (response from Master and all Secondaries)
 
 ![img_2.png](img_2.png)
-

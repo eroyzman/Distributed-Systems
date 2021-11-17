@@ -1,5 +1,5 @@
 version: "3.9"
-   
+
 services:
   master:
     build: ./master
@@ -22,7 +22,10 @@ services:
       - distributed_systems
     volumes:
       - "./slave:/slave"
-    
+    environment:
+      - DELAY=1
+      - PYTHONUNBUFFERED=1
+
   slave_2:
     build: ./slave
     ports:
@@ -31,7 +34,10 @@ services:
       - distributed_systems
     volumes:
       - "./slave:/slave"
-    
+    environment:
+      - DELAY=4
+      - PYTHONUNBUFFERED=1
+
   slave_3:
     build: ./slave
     ports:
@@ -40,6 +46,9 @@ services:
       - distributed_systems
     volumes:
       - "./slave:/slave"
+    environment:
+      - DELAY=30
+      - PYTHONUNBUFFERED=1
 
 networks:
   distributed_systems:
