@@ -33,18 +33,10 @@ async def main():
 
         if write_concern == 1:
             for ip_address in slaves_ip_addresses():
-                threading.Thread(
-                    target=send_replication_request,
-                    kwargs={
-                        "ip_address": ip_address,
-                        "message": message,
-                        "timestamp": timestamp,
-                    },
-                    daemon=True,
-                ).start()
+                send_replication_request(ip_address, message, timestamp)
             return jsonify({"message": "successful"})
 
-        tasks: list[asyncio.Task] = []
+        tasks: list[tuple[asyncio.Task, str]] = []
         for ip_address in slaves_ip_addresses():
             task = asyncio.create_task(
                 replicate_on_slaves(ip_address, message, timestamp, done)
@@ -53,13 +45,17 @@ async def main():
                 "Task for replication on slave:%s has been created",
                 ip_address,
             )
-            tasks.append(task)
+            tasks.append((task, ip_address))
 
         await done.wait()
 
-        # Cancel tasks that are not finished yet
-        for task in tasks:
-            task.cancel()
+        # For tasks that were not finished we create threads in which
+        # we will make new requests to slaves for replication to ensure that
+        # slave has received our message.
+        for task, ip_address in tasks:
+            if not task.done():
+                task.cancel()
+                send_replication_request(ip_address, message, timestamp)
 
         if done.write_concern > 1:
             return (
@@ -95,29 +91,43 @@ async def replicate_on_slaves(
                 "ip_address": f"{ip_address}",
                 "status": response.status_code,
             }
-        except (httpx.ConnectError, httpx.ReadTimeout):
+        except (httpx.ConnectError, httpx.ReadTimeout) as exception:
             done.set()
             logger.error(
-                "Error when making request to the slave:%s",
+                "Error when making request to the slave:%s %r",
                 ip_address,
-                exc_info=True,
+                exception,
             )
             return {"ip_address": f"{ip_address}", "status": 500}
 
 
 def send_replication_request(ip_address: str, message: str, timestamp: float):
-    with httpx.Client() as client:
-        try:
-            client.post(
-                ip_address, json={"message": message, "timestamp": timestamp}
-            )
-            logger.info(
-                "Response from the slave:%s has been received",
-                ip_address,
-            )
-        except (httpx.ConnectError, httpx.ReadTimeout):
-            logger.error(
-                "Error when making request to the slave:%s",
-                ip_address,
-                exc_info=True,
-            )
+    """Make replication request in the separate thread."""
+
+    def target():
+        with httpx.Client(timeout=60) as client:
+            try:
+                logger.info(
+                    "Sending replication request to the slave:%s",
+                    ip_address,
+                )
+                client.post(
+                    ip_address,
+                    json={"message": message, "timestamp": timestamp},
+                )
+                logger.info(
+                    "Response from the slave:%s has been received",
+                    ip_address,
+                )
+            except (httpx.ConnectError, httpx.ReadTimeout) as exception:
+                logger.error(
+                    "Error when making request to the slave:%s %r",
+                    ip_address,
+                    exception,
+                )
+
+    # Now we start target in the separate thread
+    threading.Thread(
+        target=target,
+        daemon=True,
+    ).start()
