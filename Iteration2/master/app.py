@@ -2,11 +2,10 @@ from flask import Flask, request, jsonify
 import httpx
 import asyncio
 
-from master.after_response import AfterResponse
+from after_response import AfterResponse
 from settings import slaves_ip_addresses
 
-# app = Flask(__name__)
-app = Flask("after_response")
+app = Flask(__name__)
 AfterResponse(app)
 MESSAGES = []
 
