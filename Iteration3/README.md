@@ -1,6 +1,6 @@
-# Distributed Systems: Phase 2
+# Distributed Systems: Phase 3
 1. Close repo with the `git clone https://github.com/eroyzman/Distributed-Systems.git`
-2. Go to Iteration2 repo `cd Iteration2`
+2. Go to Iteration2 repo `cd Iteration3`
 3. Write `docker-compose up --build`
 4. Use some tool ([httpie](https://httpie.io/cli), curl, [httpx](https://www.python-httpx.org/), [Postman](https://www.postman.com/product/what-is-postman)) to make http request to the master node
 
