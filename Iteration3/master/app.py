@@ -1,9 +1,8 @@
 import asyncio
 import logging
 import threading
-import time
-import counter
 
+import counter
 import httpx
 from flask import Flask, jsonify, request
 from settings import slaves_ip_addresses
@@ -78,7 +77,8 @@ async def replicate_on_slaves(
     async with httpx.AsyncClient(timeout=5) as client:
         try:
             response = await client.post(
-                ip_address, json={"message": message, "message_id": MESSAGE_ID.value}
+                ip_address,
+                json={"message": message, "message_id": MESSAGE_ID.value},
             )
             logger.info(
                 "Response from the slave:%s has been received",

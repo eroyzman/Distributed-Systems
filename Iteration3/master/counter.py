@@ -3,9 +3,7 @@ import itertools
 import threading
 
 
-class Counter(object):
-    """A counter that is only suitable for application without any concurrency."""
-
+class Counter:
     __slots__ = (
         "value",
         "_step",
@@ -50,7 +48,7 @@ class FastWriteCounter(Counter):
         self._lock = threading.Lock()
 
     def increment(self, num_steps=1):
-        for i in range(0, num_steps):
+        for _i in range(num_steps):
             next(self._counter)
 
     @property

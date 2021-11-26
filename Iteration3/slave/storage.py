@@ -10,14 +10,6 @@ class MessageStorage:
 
     @classmethod
     def insert_message(cls, message: str, message_id: int) -> None:
-        # Messages deduplication
-        # if timestamp in {item[1] for item in cls.messages_with_timestamps}:
-        #     logger.info(
-        #         "Message has been discarded, as it's a duplicate",
-        #     )
-        #     return
-
-        # cls.messages_with_timestamps.append((message, timestamp))
         cls.messages_with_id.insert(message_id, (message, message_id))
         logger.info("Message has been saved")
         # Sort messages by timestamp
@@ -33,12 +25,15 @@ class MessageStorage:
                 )
                 return
             elif len(cls.messages_with_id) > 1:
-                message_id_diff = [y - x for (x, y) in pairwise([item[1] for item in cls.messages_with_id])]
+                message_id_diff = [
+                    y - x
+                    for (x, y) in pairwise(
+                        [item[1] for item in cls.messages_with_id]
+                    )
+                ]
                 if not all(flag == 1 for flag in message_id_diff):
                     logger.info(
                         "Waiting for delayed message",
                     )
                     return
-        return ", ".join(
-            message[0] for message in cls.messages_with_id
-        )
+        return ", ".join(message[0] for message in cls.messages_with_id)
