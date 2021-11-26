@@ -1,5 +1,5 @@
 default_language_version:
-  python: "python3.9"
+  python: "python3.10"
 exclude: ^Iteration1/.*|archive/.*|migrations/.*|.*/(migrations|test-data|vendor)/.*|.*\.svg$
 minimum_pre_commit_version: "1.17.0"
 repos:
@@ -16,7 +16,7 @@ repos:
       - id: "black"
         # By default black hook using `python3` instead `python` language, so
         # needed to provide concrete version here as well
-        language_version: "python3.9"
+        language_version: "python3.10"
         name: "Format code (black)"
         exclude: ^docs/.*$
 
