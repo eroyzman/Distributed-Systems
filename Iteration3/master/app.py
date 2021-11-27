@@ -74,12 +74,17 @@ async def main():
 
 async def do_retry_request(ip_address: str, message: str, message_id: int):
     retry_cnt = 0
+    logger.error(
+        "Retry post to %s | retries number %d",
+        ip_address,
+        MY_RETRY,
+    )
     while (retry_cnt < MY_RETRY) and (
         send_target(ip_address, message, message_id) != 200
     ):
         retry_cnt += 1
         logger.error(
-            "Retried post to %s | try %d from %d",
+            "Retry post to %s failed | try %d from %d",
             ip_address,
             retry_cnt,
             MY_RETRY,
