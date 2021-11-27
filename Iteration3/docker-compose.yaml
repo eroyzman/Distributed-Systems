@@ -1,4 +1,4 @@
-version: "3.9"
+version: "3.10"
 
 services:
   master:
@@ -23,7 +23,7 @@ services:
     volumes:
       - "./slave:/slave"
     environment:
-      - DELAY=1
+      - DELAY=0
       - PYTHONUNBUFFERED=1
 
   slave_2:
@@ -35,7 +35,7 @@ services:
     volumes:
       - "./slave:/slave"
     environment:
-      - DELAY=4
+      - DELAY=30
       - PYTHONUNBUFFERED=1
 
   slave_3:

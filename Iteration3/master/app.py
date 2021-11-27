@@ -10,6 +10,7 @@ from settings import slaves_ip_addresses
 app = Flask(__name__)
 MESSAGES = []
 MESSAGE_ID = counter.FastWriteCounter()
+MY_RETRY = 3
 
 logging.basicConfig(format="%(asctime)s - %(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -33,20 +34,23 @@ async def main():
 
         if write_concern == 1:
             for ip_address in slaves_ip_addresses():
-                send_replication_request(ip_address, message)
+                send_replication_request(ip_address, message, MESSAGE_ID.value)
             MESSAGE_ID.increment()
             return jsonify({"message": "successful"})
 
-        tasks: list[tuple[asyncio.Task, str]] = []
+        common_tasks: list[tuple[asyncio.Task, str]] = []
         for ip_address in slaves_ip_addresses():
             task = asyncio.create_task(
-                replicate_on_slaves(ip_address, message, done)
+                replicate_on_slaves(
+                    ip_address, message, done, MESSAGE_ID.value
+                )
             )
             logger.info(
-                "Task for replication on slave:%s has been created",
+                "Task for replication on slave:%s with ID:%d has been created",
                 ip_address,
+                MESSAGE_ID.value,
             )
-            tasks.append((task, ip_address))
+            common_tasks.append((task, ip_address))
         MESSAGE_ID.increment()
 
         await done.wait()
@@ -54,35 +58,40 @@ async def main():
         # For tasks that were not finished we create threads in which
         # we will make new requests to slaves for replication to ensure that
         # slave has received our message.
-        for task, ip_address in tasks:
-            if not task.done():
-                task.cancel()
-                send_replication_request(ip_address, message)
-        MESSAGE_ID.increment()
-
         if done.write_concern > 1:
-            return (
-                jsonify(
-                    {"message": "Cannot guaranty the level of concern given"}
-                ),
-                400,
-            )
-
+            for task, ip_address in common_tasks:
+                if not task.done():
+                    asyncio.create_task(do_retry_request(ip_address, message))
     return ",".join(MESSAGES)
 
 
+async def do_retry_request(ip_address, message):
+    retry_cnt = 0
+    while (retry_cnt < MY_RETRY) and (
+        send_target(ip_address, message, MESSAGE_ID.value) != 200
+    ):
+        retry_cnt += 1
+        logger.error(
+            "Retried post to %s | try %d from %d",
+            ip_address,
+            retry_cnt,
+            MY_RETRY,
+        )
+
+
 async def replicate_on_slaves(
-    ip_address: str, message: str, done: asyncio.Event
+    ip_address: str, message: str, done: asyncio.Event, message_id: int
 ):
-    async with httpx.AsyncClient(timeout=5) as client:
+    async with httpx.AsyncClient() as client:
         try:
             response = await client.post(
                 ip_address,
-                json={"message": message, "message_id": MESSAGE_ID.value},
+                json={"message": message, "message_id": message_id},
             )
             logger.info(
-                "Response from the slave:%s has been received",
+                "Response from the slave:%s with ID:%d has been received",
                 ip_address,
+                message_id,
             )
 
             # Basically, the next thing is callback of a coroutine.
@@ -98,40 +107,49 @@ async def replicate_on_slaves(
         except (httpx.ConnectError, httpx.ReadTimeout) as exception:
             done.set()
             logger.error(
-                "Error when making request to the slave:%s %r",
+                "Error when making request to the slave:%s with ID:%d %r, "
+                "sent for retry",
                 ip_address,
+                message_id,
                 exception,
             )
             return {"ip_address": f"{ip_address}", "status": 500}
 
 
-def send_replication_request(ip_address: str, message: str):
+def send_replication_request(ip_address: str, message: str, message_id: int):
     """Make replication request in the separate thread."""
-
-    def target():
-        with httpx.Client(timeout=60) as client:
-            try:
-                logger.info(
-                    "Sending replication request to the slave:%s",
-                    ip_address,
-                )
-                client.post(
-                    ip_address,
-                    json={"message": message, "message_id": MESSAGE_ID.value},
-                )
-                logger.info(
-                    "Response from the slave:%s has been received",
-                    ip_address,
-                )
-            except (httpx.ConnectError, httpx.ReadTimeout) as exception:
-                logger.error(
-                    "Error when making request to the slave:%s %r",
-                    ip_address,
-                    exception,
-                )
 
     # Now we start target in the separate thread
     threading.Thread(
-        target=target,
+        target=send_target,
+        args=(ip_address, message, message_id),
         daemon=True,
     ).start()
+
+
+def send_target(ip_address, message, message_id):
+    with httpx.Client(timeout=5) as client:
+        try:
+            logger.info(
+                "Sending replication request to the slave:%s with ID:%d",
+                ip_address,
+                message_id,
+            )
+            response = client.post(
+                ip_address,
+                json={"message": message, "message_id": message_id},
+            )
+            logger.info(
+                "Response from the slave:%s with ID:%d has been received",
+                ip_address,
+                message_id,
+            )
+        except (httpx.ConnectError, httpx.ReadTimeout) as exception:
+            logger.error(
+                "Error when making request to the slave:%s with ID:%d %r",
+                ip_address,
+                message_id,
+                exception,
+            )
+            return 500
+    return response.status_code
