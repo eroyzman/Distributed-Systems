@@ -38,7 +38,7 @@ async def main():
             MESSAGE_ID.increment()
             return jsonify({"message": "successful"})
 
-        common_tasks: list[tuple[asyncio.Task, str]] = []
+        tasks: list[tuple[asyncio.Task, str]] = []
         for ip_address in slaves_ip_addresses():
             task = asyncio.create_task(
                 replicate_on_slaves(
@@ -50,25 +50,32 @@ async def main():
                 ip_address,
                 MESSAGE_ID.value,
             )
-            common_tasks.append((task, ip_address))
-        MESSAGE_ID.increment()
+            tasks.append((task, ip_address))
 
         await done.wait()
 
         # For tasks that were not finished we create threads in which
         # we will make new requests to slaves for replication to ensure that
         # slave has received our message.
-        if done.write_concern > 1:
-            for task, ip_address in common_tasks:
-                if not task.done():
-                    asyncio.create_task(do_retry_request(ip_address, message))
+        for task, ip_address in tasks:
+            if not task.done():
+                task.cancel()
+                if done.write_concern > 1:
+                    asyncio.create_task(
+                        do_retry_request(ip_address, message, MESSAGE_ID.value)
+                    )
+                else:
+                    send_replication_request(
+                        ip_address, message, MESSAGE_ID.value
+                    )
+        MESSAGE_ID.increment()
     return ",".join(MESSAGES)
 
 
-async def do_retry_request(ip_address, message):
+async def do_retry_request(ip_address: str, message: str, message_id: int):
     retry_cnt = 0
     while (retry_cnt < MY_RETRY) and (
-        send_target(ip_address, message, MESSAGE_ID.value) != 200
+        send_target(ip_address, message, message_id) != 200
     ):
         retry_cnt += 1
         logger.error(
@@ -128,7 +135,7 @@ def send_replication_request(ip_address: str, message: str, message_id: int):
 
 
 def send_target(ip_address, message, message_id):
-    with httpx.Client(timeout=5) as client:
+    with httpx.Client(timeout=10) as client:
         try:
             logger.info(
                 "Sending replication request to the slave:%s with ID:%d",
