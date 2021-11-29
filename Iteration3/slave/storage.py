@@ -18,34 +18,34 @@ class MessageStorage:
             return
         cls.messages_with_id.insert(message_id, (message, message_id))
         logger.info("Message with ID:%d has been saved", message_id)
-        # Sort messages by timestamp
+        # Sort messages by message id
         cls.messages_with_id.sort(key=lambda x: x[1])
 
     @classmethod
-    def messages(cls):
+    def get_suspected_messages(cls):
+        suspected_messages = []
         if cls.messages_with_id:
             item = cls.messages_with_id[0]
             if item[1] != 0:
-                messages_list = ", ".join(
-                    map(str, [item[1] for item in cls.messages_with_id])
-                )
+                suspected_messages = [message_id for message_id in range(0, item[1])]
+
+            if len(cls.messages_with_id) > 1:
+                for (x, y) in pairwise([item[1] for item in cls.messages_with_id]):
+                    if y - x != 1:
+                        suspected_messages += [message_id for message_id in range(x, y)]
+
+            if suspected_messages:
+                messages_list = ", ".join(map(str, suspected_messages))
+
                 logger.info(
                     "Waiting for delayed message | " + messages_list,
                 )
-                return ""
-            elif len(cls.messages_with_id) > 1:
-                message_id_diff = [
-                    y - x
-                    for (x, y) in pairwise(
-                        [item[1] for item in cls.messages_with_id]
-                    )
-                ]
-                if not all(flag == 1 for flag in message_id_diff):
-                    messages_list = ", ".join(
-                        map(str, [item[1] for item in cls.messages_with_id])
-                    )
-                    logger.info(
-                        "Waiting for delayed message | " + messages_list,
-                    )
-                    return ""
+
+        return suspected_messages
+
+    @classmethod
+    def messages(cls):
+        if cls.get_suspected_messages():
+            return ""
+
         return ", ".join(message[0] for message in cls.messages_with_id)
