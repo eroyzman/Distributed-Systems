@@ -1,0 +1,54 @@
+version: "3.10"
+
+services:
+  master:
+    build: ./master
+    ports:
+      - "8000:5000"
+    environment:
+      - START_RANGE
+      - END_RANGE
+      - LOCALHOST=slave
+    networks:
+      - distributed_systems
+    volumes:
+      - "./master:/master"
+
+  slave_1:
+    build: ./slave
+    ports:
+      - "6001:5000"
+    networks:
+      - distributed_systems
+    volumes:
+      - "./slave:/slave"
+    environment:
+      - DELAY=0
+      - PYTHONUNBUFFERED=1
+
+  slave_2:
+    build: ./slave
+    ports:
+      - "6002:5000"
+    networks:
+      - distributed_systems
+    volumes:
+      - "./slave:/slave"
+    environment:
+      - DELAY=100
+      - PYTHONUNBUFFERED=1
+
+  slave_3:
+    build: ./slave
+    ports:
+      - "6003:5000"
+    networks:
+      - distributed_systems
+    volumes:
+      - "./slave:/slave"
+    environment:
+      - DELAY=100
+      - PYTHONUNBUFFERED=1
+
+networks:
+  distributed_systems:
