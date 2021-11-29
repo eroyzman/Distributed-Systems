@@ -169,7 +169,7 @@ def do_retry_request(ip_address, message, message_id):
 
 
 async def replicate_on_slaves(
-    ip_address: str, message: str, done: asyncio.Event, message_id: int
+        ip_address: str, message: str, done: asyncio.Event, message_id: int
 ):
     async with httpx.AsyncClient() as client:
         try:
