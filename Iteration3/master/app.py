@@ -78,12 +78,15 @@ async def check_secondaries():
                     ip_address + "health"
                 )
 
-                response_result = response.json()
+                if response.status_code == 200:
+                    response_result = response.json()
 
-                if response_result["health"] == "Suspected":
-                    send_suspected_messages(ip_address, response_result["suspected_messages"])
+                    if response_result["health"] == "Suspected":
+                        send_suspected_messages(ip_address, response_result["suspected_messages"])
 
-                result[ip_address] = response.json()
+                    result[ip_address] = response_result
+                else:
+                    result[ip_address] = {"health": "Unhealthy"}
             except (httpx.ConnectError, httpx.ReadTimeout) as exception:
                 logger.error(
                     "Error when making request to the slave:%s with %r, "
@@ -92,7 +95,7 @@ async def check_secondaries():
                     exception,
                 )
 
-                result[ip_address] = {"status": 500}
+                result[ip_address] = {"health": "Unhealthy"}
 
     return result
 
