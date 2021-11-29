@@ -169,7 +169,7 @@ def do_retry_request(ip_address, message, message_id):
 
 
 async def replicate_on_slaves(
-        ip_address: str, message: str, done: asyncio.Event, message_id: int
+    ip_address: str, message: str, done: asyncio.Event, message_id: int
 ):
     async with httpx.AsyncClient() as client:
         try:
@@ -197,7 +197,7 @@ async def replicate_on_slaves(
             done.set()
             logger.error(
                 "Error when making request to the slave:%s with ID:%d %r, "
-                "sent for retry",
+                "scheduled for the retry",
                 ip_address,
                 message_id,
                 exception,
@@ -219,7 +219,7 @@ def send_replication_request(
 
 
 def send_message(ip_address, message, message_id):
-    with httpx.Client(timeout=5) as client:
+    with httpx.Client(timeout=30) as client:
         try:
             logger.info(
                 "Sending replication request to the slave:%s with ID:%d",
