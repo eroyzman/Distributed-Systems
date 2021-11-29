@@ -1,7 +1,7 @@
 import logging
 import time
 
-from flask import Flask, request, jsonify
+from flask import Flask, jsonify, request
 from settings import DELAY
 from storage import MessageStorage
 
@@ -29,10 +29,7 @@ def get_health_status():
     suspected_messages = MessageStorage.get_suspected_messages()
     if suspected_messages:
         return jsonify(
-            {
-                "health": "Suspected",
-                "suspected_messages": suspected_messages
-            }
+            {"health": "Suspected", "suspected_messages": suspected_messages}
         )
 
     return jsonify({"health": "Healthy"})

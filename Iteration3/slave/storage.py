@@ -27,12 +27,14 @@ class MessageStorage:
         if cls.messages_with_id:
             item = cls.messages_with_id[0]
             if item[1] != 0:
-                suspected_messages = [message_id for message_id in range(0, item[1])]
+                suspected_messages = list(range(item[1]))
 
             if len(cls.messages_with_id) > 1:
-                for (x, y) in pairwise([item[1] for item in cls.messages_with_id]):
-                    if y - x != 1:
-                        suspected_messages += [message_id for message_id in range(x, y)]
+                for (curr_id, next_id) in pairwise(
+                    [item[1] for item in cls.messages_with_id]
+                ):
+                    if next_id - curr_id != 1:
+                        suspected_messages += list(range(curr_id, next_id))
 
             if suspected_messages:
                 messages_list = ", ".join(map(str, suspected_messages))
