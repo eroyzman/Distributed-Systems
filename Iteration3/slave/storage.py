@@ -48,6 +48,6 @@ class MessageStorage:
     @classmethod
     def messages(cls):
         if cls.get_suspected_messages():
-            return ""
+            return "Waiting for the delayed messages"
 
         return ", ".join(message[0] for message in cls.messages_with_id)

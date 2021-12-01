@@ -11,9 +11,13 @@ app = Flask(__name__)
 MESSAGES = []
 MESSAGE_ID = counter.FastWriteCounter()
 MY_RETRY = 3
-QUORUM = int((len(range(START_RANGE, END_RANGE)) + 1) / 2) + 1
+QUORUM = (END_RANGE - START_RANGE + 1) // 2 + 1
 
-logging.basicConfig(format="%(asctime)s - %(message)s", level=logging.INFO)
+logging.basicConfig(
+    format="time: %(asctime)s - message: %(message)s - line: %(lineno)d",
+    level=logging.INFO,
+    datefmt="%H:%M:%S"
+)
 logger = logging.getLogger(__name__)
 
 
@@ -40,6 +44,7 @@ async def main():
         if success_cnt < QUORUM:
             return "Too few servers, less then QUORUM"
 
+        MESSAGE_ID.increment()
         MESSAGES.append([MESSAGE_ID.value, message])
 
         if write_concern == 1:
@@ -47,14 +52,12 @@ async def main():
                 send_replication_request(
                     send_message, ip_address, message, MESSAGE_ID.value
                 )
-            MESSAGE_ID.increment()
             return jsonify({"message": "successful"})
 
-        message_id = MESSAGE_ID.value
-        MESSAGE_ID.increment()
-        await send_message_to_secondaries(
-            message, slaves_ip_addresses(), message_id, write_concern
-        )
+        if not await send_message_to_secondaries(
+            message, slaves_ip_addresses(), MESSAGE_ID.value, write_concern
+        ):
+            return jsonify({"message": "Cannot guaranty level of concern given"})
 
     return ",".join([message[1] for message in MESSAGES])
 
@@ -105,6 +108,12 @@ async def check_secondaries():
 
 
 def send_suspected_messages(ip_address, suspected_messages):
+    def send_suspected_message(ip_address: str, message_id: int):
+        for message in filter(lambda m: m[0] == message_id, MESSAGES):
+            send_message_to_secondaries(
+                message[1], [ip_address], message_id, 2
+            )
+
     for suspected_message_id in suspected_messages:
         threading.Thread(
             target=send_suspected_message,
@@ -113,18 +122,10 @@ def send_suspected_messages(ip_address, suspected_messages):
         ).start()
 
 
-def send_suspected_message(ip_address, suspected_message_id):
-    for message in MESSAGES:
-        if message[0] == suspected_message_id:
-            send_message_to_secondaries(
-                message[1], [ip_address], suspected_message_id, 2
-            )
-            return
-
-
 async def send_message_to_secondaries(
-    message, secondaries, message_id, write_concern
-):
+    message: str, secondaries: list[str], message_id: int, write_concern: int
+) -> bool:
+    all_tasks_done = True
     done = asyncio.Event()
     done.write_concern = write_concern
 
@@ -141,16 +142,18 @@ async def send_message_to_secondaries(
         common_tasks.append((task, ip_address))
 
     await done.wait()
-
     # For tasks that were not finished we create threads in which
     # we will make new requests to slaves for replication to ensure that
     # slave has received our message.
     if done.write_concern > 1:
         for task, ip_address in common_tasks:
             if not task.done():
+                all_tasks_done = False
                 send_replication_request(
                     do_retry_request, ip_address, message, MESSAGE_ID.value
                 )
+
+    return all_tasks_done
 
 
 def do_retry_request(ip_address, message, message_id):

@@ -25,7 +25,7 @@ class FastWriteCounter(Counter):
         "_step",
     )
 
-    def __init__(self, init=0, step=1):
+    def __init__(self, init=-1, step=1):
         self._number_of_read = 0
         self._step = step
         self._counter = itertools.count(init, step)
