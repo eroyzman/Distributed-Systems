@@ -1,53 +1,60 @@
 import logging
-from itertools import pairwise
+import itertools
+from dataclasses import dataclass
 
-logging.basicConfig(format="%(asctime)s - %(message)s", level=logging.INFO)
+logging.basicConfig(
+    format="time: %(asctime)s - message: %(message)s - line: %(lineno)d",
+    level=logging.INFO,
+    datefmt="%H:%M:%S"
+)
 logger = logging.getLogger(__name__)
 
 
+@dataclass(frozen=True)
+class Message:
+    id: int
+    body: str
+
+
 class MessageStorage:
-    messages_with_id = []
+    messages: list[Message] = []
 
     @classmethod
     def insert_message(cls, message: str, message_id: int) -> None:
         # Messages deduplication
-        if message_id in {item[1] for item in cls.messages_with_id}:
+        if message_id in {message.id for message in cls.messages}:
             logger.info(
                 "Message has been discarded, as it's a duplicate",
             )
             return
-        cls.messages_with_id.insert(message_id, (message, message_id))
+        cls.messages.insert(message_id, Message(message_id, message))
         logger.info("Message with ID:%d has been saved", message_id)
-        # Sort messages by message id
-        cls.messages_with_id.sort(key=lambda x: x[1])
 
     @classmethod
-    def get_suspected_messages(cls):
-        suspected_messages = []
-        if cls.messages_with_id:
-            item = cls.messages_with_id[0]
-            if item[1] != 0:
-                suspected_messages = list(range(item[1]))
+    def get_missing_messages(cls):
+        missing_messages: list[int] = []
+        if cls.messages:
+            fist_message = cls.messages[0]
+            if fist_message.id != 0:
+                missing_messages = list(range(fist_message.id))
 
-            if len(cls.messages_with_id) > 1:
-                for (curr_id, next_id) in pairwise(
-                    [item[1] for item in cls.messages_with_id]
+            if len(cls.messages) > 1:
+                for (curr_id, next_id) in itertools.pairwise(
+                    [message.id for message in cls.messages]
                 ):
                     if next_id - curr_id != 1:
-                        suspected_messages += list(range(curr_id, next_id))
+                        missing_messages += list(range(curr_id, next_id))
 
-            if suspected_messages:
-                messages_list = ", ".join(map(str, suspected_messages))
-
+            if missing_messages:
                 logger.info(
-                    "Waiting for delayed message | " + messages_list,
+                    "Waiting for delayed messages | " + ", ".join(map(str, missing_messages))
                 )
 
-        return suspected_messages
+        return missing_messages
 
     @classmethod
-    def messages(cls):
-        if cls.get_suspected_messages():
+    def get_messages(cls):
+        if cls.get_missing_messages():
             return "Waiting for the delayed messages"
 
-        return ", ".join(message[0] for message in cls.messages_with_id)
+        return ", ".join(message.body for message in cls.messages)
