@@ -5,6 +5,7 @@ import time
 
 import httpx
 
+
 MY_RETRY = 3
 RETRY_WAIT = 10
 
@@ -115,7 +116,7 @@ def do_retry_request(ip_address: str, message: str, message_id: int):
 
 async def replicate_message_on_slaves(
     message: str, slaves: list[str], message_id: int, write_concern: int
-) -> bool:
+) -> None:
     done = asyncio.Event()
     done.write_concern = write_concern
 
@@ -131,23 +132,14 @@ async def replicate_message_on_slaves(
             message_id,
         )
 
-    # So if we dont receive enough successful responses to
-    # satisfy write concern we will just resume current thread
-    try:
-        await asyncio.wait_for(done.wait(), 10)
-    except asyncio.TimeoutError:
-        logger.info("Resuming main thread after waiting for response")
+    if write_concern > 1:
+        await done.wait()
     # For tasks that were not finished we create threads in which
     # we will make new requests to slaves for replication to ensure that
     # slave has received our message.
-    if done.write_concern > 1:
-        for task, ip_address in common_tasks:
-            if not task.done() or (task.done() and task.result()["status"] != 200):
-                run_in_daemon_thread(
-                    do_retry_request, ip_address, message, message_id
-                )
-    # So if we had write_concern level 2 given and received at least 1
-    # successful message function will return true
-    logger.info("Resulting write concern %d", done.write_concern)
-    return done.write_concern <= 1
+    for task, ip_address in common_tasks:
+        if not task.done() or (task.done() and task.result()["status"] != 200):
+            run_in_daemon_thread(
+                do_retry_request, ip_address, message, message_id
+            )
 

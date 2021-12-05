@@ -25,15 +25,11 @@ def main():
         time.sleep(DELAY)
         MessageStorage.insert_message(message, message_id)
 
-    return MessageStorage.get_messages()
+        if missing_messages := MessageStorage.get_missing_messages():
+            return jsonify(
+                {"health": "Suspected", "missing_messages": missing_messages}
+            )
 
-
-@app.route("/health", methods=["GET"])
-def get_health_status():
-    suspected_messages = MessageStorage.get_missing_messages()
-    if suspected_messages:
-        return jsonify(
-            {"health": "Suspected", "suspected_messages": suspected_messages}
-        )
-
-    return jsonify({"health": "Healthy"})
+    return jsonify(
+        {"health": "Healthy", "messages": MessageStorage.get_messages()}
+    )

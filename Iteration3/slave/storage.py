@@ -1,6 +1,7 @@
 import logging
 import itertools
-from dataclasses import dataclass
+import heapq
+from dataclasses import dataclass, field
 
 logging.basicConfig(
     format="time: %(asctime)s - message: %(message)s - line: %(lineno)d",
@@ -10,10 +11,10 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, order=True)
 class Message:
     id: int
-    body: str
+    body: str = field(compare=False)
 
 
 class MessageStorage:
@@ -27,7 +28,8 @@ class MessageStorage:
                 "Message has been discarded, as it's a duplicate",
             )
             return
-        cls.messages.insert(message_id, Message(message_id, message))
+
+        heapq.heappush(cls.messages, Message(message_id, message))
         logger.info("Message with ID:%d has been saved", message_id)
 
     @classmethod
@@ -57,4 +59,5 @@ class MessageStorage:
         if cls.get_missing_messages():
             return "Waiting for the delayed messages"
 
+        logger.info(f"Here is some messages: {cls.messages}")
         return ", ".join(message.body for message in cls.messages)

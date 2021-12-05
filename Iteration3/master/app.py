@@ -1,12 +1,16 @@
+import threading
 import logging
+import asyncio
 
 import counter
 from flask import Flask, jsonify, request
-from settings import END_RANGE, START_RANGE, slaves_ip_addresses
-from healthchecks import check_secondaries
-from replication import run_in_daemon_thread, replicate_message_on_slaves, send_message
 
-MESSAGES = []
+from settings import END_RANGE, START_RANGE, slaves_ip_addresses
+from annotations import Message
+from healthchecks import check_secondaries
+from replication import replicate_message_on_slaves
+
+MESSAGES: list[Message] = []
 MESSAGE_ID = counter.FastWriteCounter()
 MY_RETRY = 3
 RETRY_WAIT = 10
@@ -21,6 +25,25 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def wrapper():
+    """Wrapper function for the heartbeat functionality."""
+    async def run_heartbeat():
+        logger.info("Heartbeat process started")
+        while True:
+            logger.info("Making heartbeat requests ...")
+            await check_secondaries(MESSAGES)
+            logger.info("Heartbeat checks finished")
+            await asyncio.sleep(20)
+
+    asyncio.run(run_heartbeat())
+
+
+threading.Thread(
+    target=wrapper,
+    daemon=True,
+).start()
+
+
 @app.route("/", methods=["POST", "GET"])
 async def main():
     if request.method == "POST":
@@ -30,31 +53,23 @@ async def main():
             return jsonify(
                 {"message": "`write_concern` argument should be integer"}
             )
-        message: str = request.json.get("message")
+        message_body: str = request.json.get("message")
 
         # First we check secondaries, if they have all messages replicated.
         # If not - we send missing messages to them.
         _, slaves_alive = await check_secondaries(MESSAGES)
 
-        if slaves_alive < QUORUM:
+        if slaves_alive + 1 < QUORUM:
             return f"Too few servers:{slaves_alive}, less then QUORUM:{QUORUM}"
 
         MESSAGE_ID.increment()
-        MESSAGES.append([MESSAGE_ID.value, message])
+        MESSAGES.append(Message(MESSAGE_ID.value, message_body))
 
-        if write_concern == 1:
-            for ip_address in slaves_ip_addresses():
-                run_in_daemon_thread(
-                    send_message, ip_address, message, MESSAGE_ID.value
-                )
-            return jsonify({"message": "successful"})
+        await replicate_message_on_slaves(
+            message_body, slaves_ip_addresses(), MESSAGE_ID.value, write_concern
+        )
 
-        if not await replicate_message_on_slaves(
-            message, slaves_ip_addresses(), MESSAGE_ID.value, write_concern
-        ):
-            return jsonify({"message": "Cannot guaranty level of concern given"})
-
-    return ",".join([message[1] for message in MESSAGES])
+    return ",".join(message.body for message in MESSAGES)
 
 
 @app.route("/health", methods=["GET"])
@@ -73,6 +88,7 @@ async def quorum():
             return jsonify({"message": "`quorum` argument should be integer"})
 
     return str(QUORUM)
+
 
 
 
