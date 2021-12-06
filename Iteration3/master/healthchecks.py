@@ -34,7 +34,7 @@ async def check_secondaries(messages: list[Message]):
 
                 if response_result["health"] == "Suspected":
                     send_missing_messages(
-                        ip_address, response_result["suspected_messages"], messages
+                        ip_address, response_result["missing_messages"], messages
                     )
 
                 result[ip_address] = response.json()
@@ -69,3 +69,14 @@ def send_missing_messages(
             args=(ip_address, missing_message.body, missing_message.id),
             daemon=True,
         ).start()
+
+
+def check_all_healthy(healthchecks_result: dict):
+    if not healthchecks_result:
+        return False
+    print(healthchecks_result)
+    return not any(
+        value["health"] == "Suspected"
+        for value in healthchecks_result.values()
+    )
+

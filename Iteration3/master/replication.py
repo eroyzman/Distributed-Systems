@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 async def send_message_to_slave_initial(
     ip_address: str, message: str, done: asyncio.Event, message_id: int
 ):
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=3600) as client:
         try:
             response = await client.post(
                 ip_address,
@@ -139,6 +139,7 @@ async def replicate_message_on_slaves(
     # slave has received our message.
     for task, ip_address in common_tasks:
         if not task.done() or (task.done() and task.result()["status"] != 200):
+            task.cancel()
             run_in_daemon_thread(
                 do_retry_request, ip_address, message, message_id
             )

@@ -59,5 +59,4 @@ class MessageStorage:
         if cls.get_missing_messages():
             return "Waiting for the delayed messages"
 
-        logger.info(f"Here is some messages: {cls.messages}")
         return ", ".join(message.body for message in cls.messages)

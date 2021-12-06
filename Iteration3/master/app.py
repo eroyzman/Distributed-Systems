@@ -7,7 +7,7 @@ from flask import Flask, jsonify, request
 
 from settings import END_RANGE, START_RANGE, slaves_ip_addresses
 from annotations import Message
-from healthchecks import check_secondaries
+from healthchecks import check_secondaries, check_all_healthy
 from replication import replicate_message_on_slaves
 
 MESSAGES: list[Message] = []
@@ -29,10 +29,15 @@ def wrapper():
     """Wrapper function for the heartbeat functionality."""
     async def run_heartbeat():
         logger.info("Heartbeat process started")
+        current_message_id = MESSAGE_ID.value
+        result = {}
+
         while True:
-            logger.info("Making heartbeat requests ...")
-            await check_secondaries(MESSAGES)
-            logger.info("Heartbeat checks finished")
+            if MESSAGE_ID.value != current_message_id or not check_all_healthy(result):
+                logger.info("Making heartbeat requests ...")
+                current_message_id = MESSAGE_ID.value
+                result, _ = await check_secondaries(MESSAGES)
+                logger.info("Heartbeat checks finished")
             await asyncio.sleep(20)
 
     asyncio.run(run_heartbeat())
