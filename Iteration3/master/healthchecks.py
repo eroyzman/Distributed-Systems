@@ -67,6 +67,10 @@ def send_missing_messages(
     ):
         threading.Thread(
             target=do_retry_request,
-            args=(ip_address, missing_message.body, missing_message.message_id),
+            args=(
+                ip_address,
+                missing_message.body,
+                missing_message.message_id,
+            ),
             daemon=True,
         ).start()
