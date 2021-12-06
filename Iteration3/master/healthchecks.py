@@ -25,7 +25,7 @@ async def check_secondaries(messages: list[Message]):
                         ip_address,
                         json={
                             "message": last_message.body,
-                            "message_id": last_message.id,
+                            "message_id": last_message.message_id,
                         },
                     )
                 else:
@@ -67,6 +67,10 @@ def send_missing_messages(
     ):
         threading.Thread(
             target=do_retry_request,
-            args=(ip_address, missing_message.body, missing_message.id),
+            args=(
+                ip_address,
+                missing_message.body,
+                missing_message.message_id,
+            ),
             daemon=True,
         ).start()

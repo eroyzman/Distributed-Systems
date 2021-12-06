@@ -7,7 +7,12 @@ from annotations import Message
 from flask import Flask, jsonify, request
 from healthchecks import check_secondaries
 from replication import replicate_message_on_slaves
-from settings import END_RANGE, START_RANGE, slaves_ip_addresses
+from settings import (
+    END_RANGE,
+    HEARTBEAT_RATE,
+    START_RANGE,
+    slaves_ip_addresses,
+)
 
 MESSAGES: list[Message] = []
 MESSAGE_ID = counter.FastWriteCounter()
@@ -34,9 +39,8 @@ def wrapper():
         while True:
             logger.info("Making heartbeat requests ...")
             _, SLAVES_ALIVE = await check_secondaries(MESSAGES)
-            await check_secondaries(MESSAGES)
             logger.info("Heartbeat checks finished")
-            await asyncio.sleep(20)
+            await asyncio.sleep(HEARTBEAT_RATE)
 
     asyncio.run(run_heartbeat())
 
