@@ -1,4 +1,5 @@
 from environs import Env
+from functools import lru_cache
 
 env = Env()
 
@@ -7,6 +8,7 @@ END_RANGE = env.int("END_RANGE", 6004)
 LOCALHOST = env.str("LOCALHOST", "http://127.0.0.1")
 
 
+@lru_cache(maxsize=None)
 def slaves_ip_addresses() -> list[str]:
     ip_addresses = []
     for idx, port in enumerate(range(START_RANGE, END_RANGE), start=1):

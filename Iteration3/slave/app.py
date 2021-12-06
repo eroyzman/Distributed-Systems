@@ -7,7 +7,11 @@ from storage import MessageStorage
 
 app = Flask(__name__)
 
-logging.basicConfig(format="%(asctime)s - %(message)s", level=logging.INFO)
+logging.basicConfig(
+    format="time: %(asctime)s - message: %(message)s - line: %(lineno)d",
+    level=logging.INFO,
+    datefmt="%H:%M:%S"
+)
 logger = logging.getLogger(__name__)
 
 
@@ -21,15 +25,11 @@ def main():
         time.sleep(DELAY)
         MessageStorage.insert_message(message, message_id)
 
-    return MessageStorage.messages()
+        if missing_messages := MessageStorage.get_missing_messages():
+            return jsonify(
+                {"health": "Suspected", "missing_messages": missing_messages}
+            )
 
-
-@app.route("/health", methods=["GET"])
-def get_health_status():
-    suspected_messages = MessageStorage.get_suspected_messages()
-    if suspected_messages:
-        return jsonify(
-            {"health": "Suspected", "suspected_messages": suspected_messages}
-        )
-
-    return jsonify({"health": "Healthy"})
+    return jsonify(
+        {"health": "Healthy", "messages": MessageStorage.get_messages()}
+    )

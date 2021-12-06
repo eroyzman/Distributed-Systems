@@ -35,7 +35,7 @@ services:
     volumes:
       - "./slave:/slave"
     environment:
-      - DELAY=0
+      - DELAY=3
       - PYTHONUNBUFFERED=1
 
   slave_3:
@@ -47,7 +47,7 @@ services:
     volumes:
       - "./slave:/slave"
     environment:
-      - DELAY=0
+      - DELAY=4
       - PYTHONUNBUFFERED=1
 
 networks:
