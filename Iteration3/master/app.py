@@ -74,7 +74,7 @@ async def main():
             message_body, slaves_ip_addresses(), MESSAGE_ID.value, write_concern
         )
 
-    return ",".join(message.body for message in MESSAGES)
+    return ", ".join(message.body for message in MESSAGES)
 
 
 @app.route("/health", methods=["GET"])

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import logging
 import threading
 
@@ -18,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 async def check_secondaries(messages: list[Message]):
     result, alive_slaves = {}, 0
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=0.1) as client:
         for ip_address in slaves_ip_addresses():
             try:
                 if messages:
@@ -74,7 +76,6 @@ def send_missing_messages(
 def check_all_healthy(healthchecks_result: dict):
     if not healthchecks_result:
         return False
-    print(healthchecks_result)
     return not any(
         value["health"] == "Suspected"
         for value in healthchecks_result.values()
