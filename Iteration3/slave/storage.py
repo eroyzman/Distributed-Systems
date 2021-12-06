@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True, order=True)
 class Message:
-    id: int
+    message_id: int
     body: str = field(compare=False)
 
 

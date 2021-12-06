@@ -7,6 +7,7 @@ env = Env()
 START_RANGE = env.int("START_RANGE", 6001)
 END_RANGE = env.int("END_RANGE", 6004)
 LOCALHOST = env.str("LOCALHOST", "http://127.0.0.1")
+HEARTBEAT_RATE = env.int("HEARTBEAT_RATE", 1)
 
 
 @lru_cache(maxsize=None)

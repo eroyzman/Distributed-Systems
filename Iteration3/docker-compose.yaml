@@ -9,6 +9,7 @@ services:
       - START_RANGE
       - END_RANGE
       - LOCALHOST=slave
+      - HEARTBEAT_RATE=1
     networks:
       - distributed_systems
     volumes:
