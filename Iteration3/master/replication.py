@@ -5,14 +5,13 @@ import time
 
 import httpx
 
-
 MY_RETRY = 3
 RETRY_WAIT = 10
 
 logging.basicConfig(
     format="time: %(asctime)s - line: %(lineno)d - message: %(message)s",
     level=logging.INFO,
-    datefmt="%H:%M:%S"
+    datefmt="%H:%M:%S",
 )
 logger = logging.getLogger(__name__)
 
@@ -57,9 +56,7 @@ async def send_message_to_slave_initial(
             return {"ip_address": f"{ip_address}", "status": 500}
 
 
-def run_in_daemon_thread(
-    func, ip_address: str, message: str, message_id: int
-):
+def run_in_daemon_thread(func, ip_address: str, message: str, message_id: int):
     """Make replication request in the separate thread."""
 
     # Now we start target in the separate thread
@@ -123,7 +120,9 @@ async def replicate_message_on_slaves(
     common_tasks: list[tuple[asyncio.Task, str]] = []
     for ip_address in slaves:
         task = asyncio.create_task(
-            send_message_to_slave_initial(ip_address, message, done, message_id)
+            send_message_to_slave_initial(
+                ip_address, message, done, message_id
+            )
         )
         common_tasks.append((task, ip_address))
         logger.info(
@@ -142,4 +141,3 @@ async def replicate_message_on_slaves(
             run_in_daemon_thread(
                 do_retry_request, ip_address, message, message_id
             )
-

@@ -10,7 +10,7 @@ app = Flask(__name__)
 logging.basicConfig(
     format="time: %(asctime)s - message: %(message)s - line: %(lineno)d",
     level=logging.INFO,
-    datefmt="%H:%M:%S"
+    datefmt="%H:%M:%S",
 )
 logger = logging.getLogger(__name__)
 

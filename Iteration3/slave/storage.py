@@ -1,12 +1,12 @@
-import logging
-import itertools
 import heapq
+import itertools
+import logging
 from dataclasses import dataclass, field
 
 logging.basicConfig(
     format="time: %(asctime)s - message: %(message)s - line: %(lineno)d",
     level=logging.INFO,
-    datefmt="%H:%M:%S"
+    datefmt="%H:%M:%S",
 )
 logger = logging.getLogger(__name__)
 
@@ -49,7 +49,8 @@ class MessageStorage:
 
             if missing_messages:
                 logger.info(
-                    "Waiting for delayed messages | " + ", ".join(map(str, missing_messages))
+                    "Waiting for delayed messages | "
+                    + ", ".join(map(str, missing_messages))
                 )
 
         return missing_messages

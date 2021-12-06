@@ -1,5 +1,6 @@
-from environs import Env
 from functools import lru_cache
+
+from environs import Env
 
 env = Env()
 

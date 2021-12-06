@@ -2,16 +2,14 @@ import logging
 import threading
 
 import httpx
-
 from annotations import Message
-from settings import slaves_ip_addresses
 from replication import do_retry_request
-
+from settings import slaves_ip_addresses
 
 logging.basicConfig(
     format="time: %(asctime)s - line: %(lineno)d - message: %(message)s",
     level=logging.INFO,
-    datefmt="%H:%M:%S"
+    datefmt="%H:%M:%S",
 )
 logger = logging.getLogger(__name__)
 
@@ -25,7 +23,10 @@ async def check_secondaries(messages: list[Message]):
                     last_message = messages[-1]
                     response = await client.post(
                         ip_address,
-                        json={"message": last_message.body, "message_id": last_message.id},
+                        json={
+                            "message": last_message.body,
+                            "message_id": last_message.id,
+                        },
                     )
                 else:
                     response = await client.get(ip_address)
@@ -34,7 +35,9 @@ async def check_secondaries(messages: list[Message]):
 
                 if response_result["health"] == "Suspected":
                     send_missing_messages(
-                        ip_address, response_result["suspected_messages"], messages
+                        ip_address,
+                        response_result["missing_messages"],
+                        messages,
                     )
 
                 result[ip_address] = response.json()
@@ -52,14 +55,12 @@ async def check_secondaries(messages: list[Message]):
 
 
 def send_missing_messages(
-    ip_address,
-    missing_message_ids: list[int],
-    messages: list[Message]
+    ip_address, missing_message_ids: list[int], messages: list[Message]
 ):
     logger.info(
         "Sending messages:%s for the %s that might have missed it",
         missing_message_ids,
-        ip_address
+        ip_address,
     )
     for missing_message in filter(
         lambda m: m.id in missing_message_ids, messages
