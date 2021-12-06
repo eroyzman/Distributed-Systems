@@ -23,7 +23,7 @@ class MessageStorage:
     @classmethod
     def insert_message(cls, message: str, message_id: int) -> None:
         # Messages deduplication
-        if message_id in {message.id for message in cls.messages}:
+        if message_id in {message.message_id for message in cls.messages}:
             logger.info(
                 "Message has been discarded, as it's a duplicate",
             )
@@ -37,12 +37,12 @@ class MessageStorage:
         missing_messages: list[int] = []
         if cls.messages:
             fist_message = cls.messages[0]
-            if fist_message.id != 0:
-                missing_messages = list(range(fist_message.id))
+            if fist_message.message_id != 0:
+                missing_messages = list(range(fist_message.message_id))
 
             if len(cls.messages) > 1:
                 for (curr_id, next_id) in itertools.pairwise(
-                    [message.id for message in cls.messages]
+                    [message.message_id for message in cls.messages]
                 ):
                     if next_id - curr_id != 1:
                         missing_messages += list(range(curr_id, next_id))
