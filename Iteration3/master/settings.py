@@ -1,11 +1,14 @@
-from environs import Env
 from functools import lru_cache
+
+from environs import Env
 
 env = Env()
 
 START_RANGE = env.int("START_RANGE", 6001)
-END_RANGE = env.int("END_RANGE", 6004)
+END_RANGE = env.int("END_RANGE", 6003)
 LOCALHOST = env.str("LOCALHOST", "http://127.0.0.1")
+QUORUM = (END_RANGE - START_RANGE + 1) // 2 + 1
+HEARTBEAT_RATE = 4
 
 
 @lru_cache(maxsize=None)

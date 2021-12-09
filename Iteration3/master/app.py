@@ -1,44 +1,39 @@
-import threading
-import logging
 import asyncio
+import logging
+import threading
 
 import counter
-from flask import Flask, jsonify, request
-
-from settings import END_RANGE, START_RANGE, slaves_ip_addresses
 from annotations import Message
-from healthchecks import check_secondaries, check_all_healthy
+from flask import Flask, jsonify, request
+from healthchecks import SlavesInspector, check_secondaries
 from replication import replicate_message_on_slaves
+from settings import HEARTBEAT_RATE, QUORUM
 
 MESSAGES: list[Message] = []
 MESSAGE_ID = counter.FastWriteCounter()
-MY_RETRY = 3
-RETRY_WAIT = 10
-QUORUM = (END_RANGE - START_RANGE + 1) // 2 + 1
+SLAVES_INSPECTOR = SlavesInspector()
+
 app = Flask(__name__)
 
 logging.basicConfig(
     format="time: %(asctime)s - line: %(lineno)d - message: %(message)s",
     level=logging.INFO,
-    datefmt="%H:%M:%S"
+    datefmt="%H:%M:%S",
 )
 logger = logging.getLogger(__name__)
 
 
 def wrapper():
     """Wrapper function for the heartbeat functionality."""
-    async def run_heartbeat():
-        logger.info("Heartbeat process started")
-        current_message_id = MESSAGE_ID.value
-        result = {}
 
+    async def run_heartbeat():
+        global SLAVES_INSPECTOR
+        logger.info("Heartbeat process started")
         while True:
-            if MESSAGE_ID.value != current_message_id or not check_all_healthy(result):
-                logger.info("Making heartbeat requests ...")
-                current_message_id = MESSAGE_ID.value
-                result, _ = await check_secondaries(MESSAGES)
-                logger.info("Heartbeat checks finished")
-            await asyncio.sleep(20)
+            logger.info("Making heartbeat requests ...")
+            SLAVES_INSPECTOR = await check_secondaries()
+            logger.info("Heartbeat checks finished")
+            await asyncio.sleep(60 / HEARTBEAT_RATE)
 
     asyncio.run(run_heartbeat())
 
@@ -60,40 +55,17 @@ async def main():
             )
         message_body: str = request.json.get("message")
 
-        # First we check secondaries, if they have all messages replicated.
-        # If not - we send missing messages to them.
-        _, slaves_alive = await check_secondaries(MESSAGES)
-
-        if slaves_alive + 1 < QUORUM:
-            return f"Too few servers:{slaves_alive}, less then QUORUM:{QUORUM}"
+        if alive_slaves := (SLAVES_INSPECTOR.slaves_alive_num + 1) < QUORUM:
+            return f"Too few servers:{alive_slaves}, less then QUORUM:{QUORUM}"
 
         MESSAGE_ID.increment()
         MESSAGES.append(Message(MESSAGE_ID.value, message_body))
 
         await replicate_message_on_slaves(
-            message_body, slaves_ip_addresses(), MESSAGE_ID.value, write_concern
+            MESSAGE_ID.value,
+            MESSAGES,
+            SLAVES_INSPECTOR.slaves_alive,
+            write_concern,
         )
 
     return ", ".join(message.body for message in MESSAGES)
-
-
-@app.route("/health", methods=["GET"])
-async def get_health_status():
-    result, _ = await check_secondaries(MESSAGES)
-    return str(result)
-
-
-@app.route("/quorum", methods=["POST", "GET"])
-async def quorum():
-    global QUORUM
-    if request.method == "POST":
-        try:
-            QUORUM = int(request.json.get("quorum"))
-        except (TypeError, ValueError):
-            return jsonify({"message": "`quorum` argument should be integer"})
-
-    return str(QUORUM)
-
-
-
-

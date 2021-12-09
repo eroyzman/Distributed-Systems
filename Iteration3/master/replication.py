@@ -1,10 +1,15 @@
+from __future__ import annotations
+
 import asyncio
 import logging
 import threading
 import time
+from typing import TYPE_CHECKING
 
 import httpx
 
+if TYPE_CHECKING:
+    from app import Message
 
 MY_RETRY = 3
 RETRY_WAIT = 10
@@ -12,41 +17,32 @@ RETRY_WAIT = 10
 logging.basicConfig(
     format="time: %(asctime)s - line: %(lineno)d - message: %(message)s",
     level=logging.INFO,
-    datefmt="%H:%M:%S"
+    datefmt="%H:%M:%S",
 )
 logger = logging.getLogger(__name__)
 
 
 async def send_message_to_slave_initial(
-    ip_address: str, message: str, done: asyncio.Event, message_id: int
+    messages: list[Message],
+    message_id: int,
+    done: asyncio.Event,
+    ip_address: str,
 ):
-    async with httpx.AsyncClient(timeout=3600) as client:
+    async with httpx.AsyncClient(timeout=None) as client:
         try:
             response = await client.post(
                 ip_address,
-                json={"message": message, "message_id": message_id},
+                json={
+                    "message": messages[message_id].body,
+                    "message_id": message_id,
+                },
             )
             logger.info(
                 "Response from the slave:%s with ID:%d has been received",
                 ip_address,
                 message_id,
             )
-
-            # Basically, the next thing is callback of a coroutine.
-            if response.status_code == 200:
-                done.write_concern -= 1
-            if done.write_concern <= 1:
-                done.set()
-
-            return {
-                "ip_address": f"{ip_address}",
-                "status": response.status_code,
-            }
-        except (httpx.ConnectError, httpx.ReadTimeout) as exception:
-            # We need this sleep to give other slaves opportunity to receive
-            # replicated messages
-            await asyncio.sleep(RETRY_WAIT)
-            done.set()
+        except httpx.ConnectError as exception:
             logger.error(
                 "Error when making request to the slave:%s with ID:%d %r, "
                 "scheduled for the retry",
@@ -54,12 +50,31 @@ async def send_message_to_slave_initial(
                 message_id,
                 exception,
             )
-            return {"ip_address": f"{ip_address}", "status": 500}
+            return {"ip_address": ip_address, "status": 500}
+        else:
+            # Sending missing messages, if any
+            # TODO: Move finding missing messages to the master node.
+            if (data := response.json()["health"]) == "Suspected":
+                send_missing_messages(
+                    ip_address, data["missing_messages"], messages
+                )
+
+            logger.warning(
+                f"Actual data received from the slave:{ip_address} is {data}"
+            )
+
+            if response.status_code == 200:
+                done.write_concern -= 1
+            if done.write_concern <= 1:
+                done.set()
+
+            return {
+                "ip_address": ip_address,
+                "status": response.status_code,
+            }
 
 
-def run_in_daemon_thread(
-    func, ip_address: str, message: str, message_id: int
-):
+def run_in_daemon_thread(func, ip_address: str, message: str, message_id: int):
     """Make replication request in the separate thread."""
 
     # Now we start target in the separate thread
@@ -114,8 +129,29 @@ def do_retry_request(ip_address: str, message: str, message_id: int):
         time.sleep(RETRY_WAIT)
 
 
+def send_missing_messages(
+    ip_address, missing_message_ids: list[int], messages: list[Message]
+):
+    logger.info(
+        "Sending messages:%s for the %s that might have missed it",
+        missing_message_ids,
+        ip_address,
+    )
+    for missing_message in filter(
+        lambda m: m.id in missing_message_ids, messages
+    ):
+        threading.Thread(
+            target=do_retry_request,
+            args=(ip_address, missing_message.body, missing_message.id),
+            daemon=True,
+        ).start()
+
+
 async def replicate_message_on_slaves(
-    message: str, slaves: list[str], message_id: int, write_concern: int
+    message_id: int,
+    messages: list[Message],
+    slaves: list[str],
+    write_concern: int,
 ) -> None:
     done = asyncio.Event()
     done.write_concern = write_concern
@@ -123,7 +159,9 @@ async def replicate_message_on_slaves(
     common_tasks: list[tuple[asyncio.Task, str]] = []
     for ip_address in slaves:
         task = asyncio.create_task(
-            send_message_to_slave_initial(ip_address, message, done, message_id)
+            send_message_to_slave_initial(
+                messages, message_id, done, ip_address
+            )
         )
         common_tasks.append((task, ip_address))
         logger.info(
@@ -141,6 +179,8 @@ async def replicate_message_on_slaves(
         if not task.done() or (task.done() and task.result()["status"] != 200):
             task.cancel()
             run_in_daemon_thread(
-                do_retry_request, ip_address, message, message_id
+                do_retry_request,
+                ip_address,
+                messages[message_id].body,
+                message_id,
             )
-

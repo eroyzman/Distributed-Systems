@@ -4,80 +4,64 @@ import logging
 import threading
 
 import httpx
-
 from annotations import Message
-from settings import slaves_ip_addresses
 from replication import do_retry_request
-
+from settings import slaves_ip_addresses
 
 logging.basicConfig(
     format="time: %(asctime)s - line: %(lineno)d - message: %(message)s",
     level=logging.INFO,
-    datefmt="%H:%M:%S"
+    datefmt="%H:%M:%S",
 )
 logger = logging.getLogger(__name__)
 
 
-async def check_secondaries(messages: list[Message]):
-    result, alive_slaves = {}, 0
-    async with httpx.AsyncClient(timeout=0.1) as client:
+class SlavesInspector:
+    def __init__(self):
+        self.slave_statuses = {}
+        self._lock = threading.Lock()
+
+    def set_slave_status(self, slave_ip: str, status: str):
+        self.slave_statuses[slave_ip] = status
+
+    @property
+    def slaves_alive(self) -> list[str]:
+        return [
+            ip_address
+            for ip_address, status in self.slave_statuses.items()
+            if status == "Healthy"
+        ]
+
+    @property
+    def slaves_alive_num(self) -> int:
+        return len(self.slaves_alive)
+
+    def __len__(self):
+        return len(self.slave_statuses)
+
+
+async def check_secondaries(timeout: float = 1) -> SlavesInspector:
+    slaves_inspector = SlavesInspector()
+
+    async with httpx.AsyncClient(timeout=timeout) as client:
         for ip_address in slaves_ip_addresses():
             try:
-                if messages:
-                    last_message = messages[-1]
-                    response = await client.post(
-                        ip_address,
-                        json={"message": last_message.body, "message_id": last_message.id},
-                    )
-                else:
-                    response = await client.get(ip_address)
-
+                logger.info(
+                    f"Sending heartbeat to the ip_address:{ip_address}"
+                )
+                response = await client.get(ip_address)
                 response_result = response.json()
+                logger.info(
+                    f"Response from the slave:{ip_address} has been received: {response_result}"
+                )
 
-                if response_result["health"] == "Suspected":
-                    send_missing_messages(
-                        ip_address, response_result["missing_messages"], messages
-                    )
-
-                result[ip_address] = response.json()
-                alive_slaves += 1
+                slaves_inspector.set_slave_status(ip_address, "Healthy")
             except (httpx.ConnectError, httpx.ReadTimeout) as exception:
                 logger.error(
-                    "Error when making check request to the slave:%s with %r, "
-                    "scheduled for the retry",
+                    "Error when making check request to the slave:%s with %r",
                     ip_address,
                     exception,
                 )
-                result[ip_address] = {"health": "Suspected", "status": 500}
+                slaves_inspector.set_slave_status(ip_address, "Suspected")
 
-    return result, alive_slaves
-
-
-def send_missing_messages(
-    ip_address,
-    missing_message_ids: list[int],
-    messages: list[Message]
-):
-    logger.info(
-        "Sending messages:%s for the %s that might have missed it",
-        missing_message_ids,
-        ip_address
-    )
-    for missing_message in filter(
-        lambda m: m.id in missing_message_ids, messages
-    ):
-        threading.Thread(
-            target=do_retry_request,
-            args=(ip_address, missing_message.body, missing_message.id),
-            daemon=True,
-        ).start()
-
-
-def check_all_healthy(healthchecks_result: dict):
-    if not healthchecks_result:
-        return False
-    return not any(
-        value["health"] == "Suspected"
-        for value in healthchecks_result.values()
-    )
-
+    return slaves_inspector

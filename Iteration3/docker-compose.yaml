@@ -38,17 +38,5 @@ services:
       - DELAY=0
       - PYTHONUNBUFFERED=1
 
-  slave_3:
-    build: ./slave
-    ports:
-      - "6003:5000"
-    networks:
-      - distributed_systems
-    volumes:
-      - "./slave:/slave"
-    environment:
-      - DELAY=0
-      - PYTHONUNBUFFERED=1
-
 networks:
   distributed_systems:
