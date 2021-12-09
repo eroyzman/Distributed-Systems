@@ -4,8 +4,6 @@ import logging
 import threading
 
 import httpx
-from annotations import Message
-from replication import do_retry_request
 from settings import slaves_ip_addresses
 
 logging.basicConfig(

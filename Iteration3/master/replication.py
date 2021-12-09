@@ -52,17 +52,6 @@ async def send_message_to_slave_initial(
             )
             return {"ip_address": ip_address, "status": 500}
         else:
-            # Sending missing messages, if any
-            # TODO: Move finding missing messages to the master node.
-            if (data := response.json()["health"]) == "Suspected":
-                send_missing_messages(
-                    ip_address, data["missing_messages"], messages
-                )
-
-            logger.warning(
-                f"Actual data received from the slave:{ip_address} is {data}"
-            )
-
             if response.status_code == 200:
                 done.write_concern -= 1
             if done.write_concern <= 1:
@@ -74,12 +63,27 @@ async def send_message_to_slave_initial(
             }
 
 
-def run_in_daemon_thread(func, ip_address: str, message: str, message_id: int):
+def run_in_daemon_thread(ip_address: str, message: str, message_id: int):
     """Make replication request in the separate thread."""
+
+    def do_retry_request(ip_address: str, message: str, message_id: int):
+        attempts_cnt = 0
+        while (attempts_cnt <= MY_RETRY) and (
+            send_message(ip_address, message, message_id) != 200
+        ):
+            if attempts_cnt != 0:
+                logger.error(
+                    "Retried post to %s | try %d from %d",
+                    ip_address,
+                    attempts_cnt,
+                    MY_RETRY,
+                )
+            attempts_cnt += 1
+            time.sleep(RETRY_WAIT)
 
     # Now we start target in the separate thread
     threading.Thread(
-        target=func,
+        target=do_retry_request,
         args=(ip_address, message, message_id),
         daemon=True,
     ).start()
@@ -111,40 +115,6 @@ def send_message(ip_address, message, message_id):
             )
             return 500
     return response.status_code
-
-
-def do_retry_request(ip_address: str, message: str, message_id: int):
-    attempts_cnt = 0
-    while (attempts_cnt <= MY_RETRY) and (
-        send_message(ip_address, message, message_id) != 200
-    ):
-        if attempts_cnt != 0:
-            logger.error(
-                "Retried post to %s | try %d from %d",
-                ip_address,
-                attempts_cnt,
-                MY_RETRY,
-            )
-        attempts_cnt += 1
-        time.sleep(RETRY_WAIT)
-
-
-def send_missing_messages(
-    ip_address, missing_message_ids: list[int], messages: list[Message]
-):
-    logger.info(
-        "Sending messages:%s for the %s that might have missed it",
-        missing_message_ids,
-        ip_address,
-    )
-    for missing_message in filter(
-        lambda m: m.id in missing_message_ids, messages
-    ):
-        threading.Thread(
-            target=do_retry_request,
-            args=(ip_address, missing_message.body, missing_message.id),
-            daemon=True,
-        ).start()
 
 
 async def replicate_message_on_slaves(
@@ -179,8 +149,45 @@ async def replicate_message_on_slaves(
         if not task.done() or (task.done() and task.result()["status"] != 200):
             task.cancel()
             run_in_daemon_thread(
-                do_retry_request,
                 ip_address,
                 messages[message_id].body,
                 message_id,
             )
+
+
+def send_missing_messages_to_slave(
+    ip_address, missing_message_ids: list[int], messages: list[Message]
+):
+    logger.info(
+        "Sending messages:%s for the %s that might have missed it",
+        missing_message_ids,
+        ip_address,
+    )
+    for missing_message in filter(
+        lambda m: m.id in missing_message_ids, messages
+    ):
+        run_in_daemon_thread(
+            ip_address, missing_message.body, missing_message.id
+        )
+
+
+async def sync_slaves_messages(
+    ip_addresses: list[str], messages: list[Message]
+):
+    if not messages:
+        return
+
+    last_message = messages[-1]
+    for ip_address in ip_addresses:
+        async with httpx.AsyncClient(timeout=30) as client:
+            response = client.post(
+                ip_address,
+                json={
+                    "message": last_message.body,
+                    "message_id": last_message.id,
+                },
+            )
+            if (data := response.json()["health"]) == "Suspected":
+                send_missing_messages_to_slave(
+                    ip_address, data["missing_messages"], messages
+                )
