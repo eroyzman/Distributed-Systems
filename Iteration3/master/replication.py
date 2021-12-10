@@ -10,6 +10,7 @@ import httpx
 
 if TYPE_CHECKING:
     from app import Message
+    from healthchecks import SlavesInspector
 
 MY_RETRY = 3
 RETRY_WAIT = 10
@@ -63,23 +64,43 @@ async def send_message_to_slave_initial(
             }
 
 
-def run_in_daemon_thread(ip_address: str, message: str, message_id: int):
+def run_in_daemon_thread(
+    ip_address: str,
+    message: str,
+    message_id: int,
+    slaves_inspector: SlavesInspector = None,
+):
     """Make replication request in the separate thread."""
 
     def do_retry_request(ip_address: str, message: str, message_id: int):
         attempts_cnt = 0
-        while (attempts_cnt <= MY_RETRY) and (
-            send_message(ip_address, message, message_id) != 200
-        ):
-            if attempts_cnt != 0:
-                logger.error(
-                    "Retried post to %s | try %d from %d",
+        waiting_seconds = 0
+        response = 0
+
+        while response != 200:
+            while not slaves_inspector.is_alive(ip_address):
+                #  Wait for node to be again alive
+                time.sleep(10)
+                waiting_seconds += 10
+                logger.info(
+                    "Waiting for the slave: %s to be alive for the %d seconds",
                     ip_address,
-                    attempts_cnt,
-                    MY_RETRY,
+                    waiting_seconds,
                 )
-            attempts_cnt += 1
-            time.sleep(RETRY_WAIT)
+
+            while (
+                slaves_inspector.is_alive(ip_address)
+                and (response := send_message(ip_address, message, message_id))
+                != 200
+            ):
+                if attempts_cnt != 0:
+                    logger.error(
+                        "Retried post to %s | try %d from %d",
+                        ip_address,
+                        attempts_cnt,
+                        MY_RETRY,
+                    )
+                attempts_cnt += 1
 
     # Now we start target in the separate thread
     threading.Thread(
@@ -89,8 +110,8 @@ def run_in_daemon_thread(ip_address: str, message: str, message_id: int):
     ).start()
 
 
-def send_message(ip_address, message, message_id):
-    with httpx.Client(timeout=30) as client:
+def send_message(ip_address, message, message_id) -> int:
+    with httpx.Client(timeout=10) as client:
         try:
             logger.info(
                 "Sending replication request to the slave:%s with ID:%d",
@@ -120,14 +141,14 @@ def send_message(ip_address, message, message_id):
 async def replicate_message_on_slaves(
     message_id: int,
     messages: list[Message],
-    slaves: list[str],
+    slave_inspector: SlavesInspector,
     write_concern: int,
 ) -> None:
     done = asyncio.Event()
     done.write_concern = write_concern
 
     common_tasks: list[tuple[asyncio.Task, str]] = []
-    for ip_address in slaves:
+    for ip_address in slave_inspector.slaves_alive:
         task = asyncio.create_task(
             send_message_to_slave_initial(
                 messages, message_id, done, ip_address
@@ -152,42 +173,14 @@ async def replicate_message_on_slaves(
                 ip_address,
                 messages[message_id].body,
                 message_id,
+                slave_inspector,
             )
 
-
-def send_missing_messages_to_slave(
-    ip_address, missing_message_ids: list[int], messages: list[Message]
-):
-    logger.info(
-        "Sending messages:%s for the %s that might have missed it",
-        missing_message_ids,
-        ip_address,
-    )
-    for missing_message in filter(
-        lambda m: m.id in missing_message_ids, messages
-    ):
+    # Also schedule replication of the message on the dead slaves
+    for ip_address in slave_inspector.slaves_dead:
         run_in_daemon_thread(
-            ip_address, missing_message.body, missing_message.id
+            ip_address,
+            messages[message_id].body,
+            message_id,
+            slave_inspector,
         )
-
-
-async def sync_slaves_messages(
-    ip_addresses: list[str], messages: list[Message]
-):
-    if not messages:
-        return
-
-    last_message = messages[-1]
-    for ip_address in ip_addresses:
-        async with httpx.AsyncClient(timeout=30) as client:
-            response = client.post(
-                ip_address,
-                json={
-                    "message": last_message.body,
-                    "message_id": last_message.id,
-                },
-            )
-            if (data := response.json()["health"]) == "Suspected":
-                send_missing_messages_to_slave(
-                    ip_address, data["missing_messages"], messages
-                )

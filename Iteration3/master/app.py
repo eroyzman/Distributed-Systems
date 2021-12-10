@@ -1,13 +1,12 @@
 import asyncio
 import logging
 import threading
-import time
 
 import counter
 from annotations import Message
 from flask import Flask, jsonify, request
 from healthchecks import SlavesInspector, check_secondaries
-from replication import replicate_message_on_slaves, sync_slaves_messages
+from replication import replicate_message_on_slaves
 from settings import HEARTBEAT_RATE, QUORUM
 
 MESSAGES: list[Message] = []
@@ -28,33 +27,18 @@ def heartbeat_wrapper():
     """Wrapper function for the heartbeat functionality."""
 
     async def run_heartbeat():
-        global SLAVES_INSPECTOR
         logger.info("Heartbeat process started")
         while True:
             logger.info("Making heartbeat requests ...")
-            SLAVES_INSPECTOR = await check_secondaries()
+            await check_secondaries(SLAVES_INSPECTOR)
             logger.info("Heartbeat checks finished")
             await asyncio.sleep(60 / HEARTBEAT_RATE)
 
     asyncio.run(run_heartbeat())
 
 
-def sync_slaves_wrapper():
-    async def run_sync_slaves():
-        while True:
-            await sync_slaves_messages(SLAVES_INSPECTOR.slaves_alive, MESSAGES)
-            await asyncio.sleep(20)
-
-    asyncio.run(run_sync_slaves())
-
-
 threading.Thread(
     target=heartbeat_wrapper,
-    daemon=True,
-).start()
-
-threading.Thread(
-    target=sync_slaves_wrapper,
     daemon=True,
 ).start()
 
@@ -79,7 +63,7 @@ async def main():
         await replicate_message_on_slaves(
             MESSAGE_ID.value,
             MESSAGES,
-            SLAVES_INSPECTOR.slaves_alive,
+            SLAVES_INSPECTOR,
             write_concern,
         )
 

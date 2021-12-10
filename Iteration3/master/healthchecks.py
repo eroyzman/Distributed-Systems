@@ -22,13 +22,26 @@ class SlavesInspector:
     def set_slave_status(self, slave_ip: str, status: str):
         self.slave_statuses[slave_ip] = status
 
+    def is_alive(self, slave_ip: str) -> bool:
+        return slave_ip in self.slaves_alive
+
     @property
     def slaves_alive(self) -> list[str]:
-        return [
-            ip_address
-            for ip_address, status in self.slave_statuses.items()
-            if status == "Healthy"
-        ]
+        with self._lock:
+            return [
+                ip_address
+                for ip_address, status in self.slave_statuses.items()
+                if status == "Healthy"
+            ]
+
+    @property
+    def slaves_dead(self) -> list[str]:
+        with self._lock:
+            return [
+                ip_address
+                for ip_address, status in self.slave_statuses.items()
+                if status != "Healthy"
+            ]
 
     @property
     def slaves_alive_num(self) -> int:
@@ -38,9 +51,9 @@ class SlavesInspector:
         return len(self.slave_statuses)
 
 
-async def check_secondaries(timeout: float = 1) -> SlavesInspector:
-    slaves_inspector = SlavesInspector()
-
+async def check_secondaries(
+    slaves_inspector: SlavesInspector, timeout: float = 1
+) -> None:
     async with httpx.AsyncClient(timeout=timeout) as client:
         for ip_address in slaves_ip_addresses():
             try:
@@ -61,5 +74,3 @@ async def check_secondaries(timeout: float = 1) -> SlavesInspector:
                     exception,
                 )
                 slaves_inspector.set_slave_status(ip_address, "Suspected")
-
-    return slaves_inspector
